@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Multi-Agent Assistant</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .input-box {
+      display: flex;
+      gap: 10px;
+    }
+
+    input {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+    }
+
+    button {
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: none;
+      background: #38bdf8;
+      color: black;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .chat {
+      margin-top: 20px;
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 10px;
+      min-height: 200px;
+    }
+
+    .msg {
+      margin-bottom: 15px;
+    }
+
+    .user {
+      color: #facc15;
+    }
+
+    .system {
+      color: #38bdf8;
+    }
+
+    .agents {
+      margin-top: 20px;
+      background: #020617;
+      padding: 15px;
+      border-radius: 10px;
+    }
+
+    .agent-tag {
+      display: inline-block;
+      padding: 5px 10px;
+      margin: 5px;
+      background: #334155;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>🤖 Multi-Agent AI Assistant</h2>
+
+<div class="input-box">
+  <input id="query" placeholder="Ask something..." />
+  <button onclick="send()">Send</button>
+</div>
+
+<div class="chat" id="chat"></div>
+
+<div class="agents" id="agents">
+  <b>⚙️ Agent Activity:</b><br/>
+</div>
+
+</div>
+
+<script>
+async function send() {
+  const input = document.getElementById("query");
+  const q = input.value;
+
+  const res = await fetch("/ask", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({query: q})
+  });
+
+  const data = await res.json();
+
+  const chat = document.getElementById("chat");
+  const agents = document.getElementById("agents");
+
+  // Clear agent panel
+  agents.innerHTML = "<b>⚙️ Agent Activity:</b><br/>";
+
+  chat.innerHTML += `<div class="msg user"><b>You:</b> ${q}</div>`;
+
+  // Handle structured response
+  const response = data.response;
+
+  if (response.actions) {
+    response.actions.forEach(a => {
+      agents.innerHTML += `<span class="agent-tag">${a}</span>`;
+    });
+  }
+
+  chat.innerHTML += `<div class="msg system"><b>System:</b> ${response.mode}</div>`;
+
+  input.value = "";
+}
+</script>
+
+</body>
+</html>

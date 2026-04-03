@@ -7,3 +7,8 @@ calendar_agent = Agent(
     description="Handles scheduling and calendar events",
     tools=[create_event],
 )
+from personal_assistant.memory_store import memory_db
+
+def create_event(data):
+    memory_db["meetings"].append(data)
+    return f"✅ Meeting scheduled: {data}"
