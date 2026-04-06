@@ -1,11 +1,8 @@
 # app/agents/orchestrator.py
-
-from app.services.intent_service import detect_intent
-
 from app.agents.calendar_agent import calendar_agent
 from app.agents.task_agent import task_agent
 from app.agents.memory_agent import memory_agent
-
+from app.services.intent_service import detect_intent
 
 def handle_request(query: str):
     try:
@@ -17,14 +14,26 @@ def handle_request(query: str):
         agents_used = []
         actions = []
 
-        # 🔥 Intent-based routing (REAL LOGIC)
+        # 🔥 BASIC PARSING (simple but effective)
+        query_lower = query.lower()
+
+        # naive extraction (good enough for hackathon)
+        title = query
+        time = "Not specified"
+
+        if "tomorrow" in query_lower:
+            time = "Tomorrow"
+        elif "today" in query_lower:
+            time = "Today"
+
+        # 🔥 Intent-based routing
 
         if intent == "calendar":
             agents_used.append("CalendarAgent")
             actions.append(
                 calendar_agent.tools[0]({
-                    "title": "Meeting",
-                    "time": "Tomorrow 10 AM"
+                    "title": title,
+                    "time": time
                 })
             )
 
@@ -32,7 +41,7 @@ def handle_request(query: str):
             agents_used.append("TaskAgent")
             actions.append(
                 task_agent.tools[0]({
-                    "task": "Prepare slides"
+                    "task": query
                 })
             )
 
@@ -40,7 +49,7 @@ def handle_request(query: str):
             agents_used.append("KnowledgeAgent")
             actions.append(f"🧠 Answering: {query}")
 
-        # Always memory
+        # always memory
         agents_used.append("MemoryAgent")
         actions.append(memory_agent.tools[0](query))
 

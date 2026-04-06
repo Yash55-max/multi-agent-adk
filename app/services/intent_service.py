@@ -1,17 +1,9 @@
 def detect_intent(query: str):
-    query = query.lower()
+    q = query.lower()
 
-    if any(word in query for word in ["meeting", "schedule", "appointment"]):
+    if "meeting" in q or "schedule" in q:
         return "calendar"
-
-    elif any(word in query for word in ["task", "todo", "prepare", "complete"]):
+    elif "task" in q or "prepare" in q:
         return "task"
-
-    elif any(word in query for word in ["remember", "note", "store"]):
-        return "memory"
-
-    elif any(word in query for word in ["what", "explain", "tell"]):
-        return "knowledge"
-
     else:
-        return "memory"
+        return "knowledge"

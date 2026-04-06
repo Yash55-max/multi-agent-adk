@@ -1,2 +1,4 @@
-def create_event(title: str, time: str) -> str:
-    return f"Event '{title}' scheduled at {time}"
+from app.services.db_service import insert_meeting
+
+def create_event(data):
+    return insert_meeting(data["title"], data["time"])

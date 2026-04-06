@@ -1,2 +1,4 @@
-def create_task(task: str) -> str:
-    return f"Task '{task}' created"
+from app.services.db_service import insert_task
+
+def create_task(data):
+    return insert_task(data["task"])

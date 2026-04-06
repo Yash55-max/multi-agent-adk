@@ -4,10 +4,8 @@ from app.agents.orchestrator import handle_request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-
 app = FastAPI()
 
-# ✅ serve static safely
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
