@@ -1,15 +1,17 @@
-import os
+# app/services/llm_service.py
 
-import google.generativeai as genai
-from dotenv import load_dotenv
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
-load_dotenv()
+# ✅ Initialize ONCE (global level)
+vertexai.init(
+    project="yash-genai-final",
+    location="us-central1"
+)
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# ✅ Load model once
+model = GenerativeModel("gemini-1.5-flash")
 
-model = genai.GenerativeModel("gemini-pro")
-
-
-def generate_response(prompt: str) -> str:
+def generate_response(prompt: str):
     response = model.generate_content(prompt)
     return response.text
