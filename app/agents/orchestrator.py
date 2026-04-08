@@ -1,75 +1,265 @@
-# app/agents/orchestrator.py
-from app.agents.calendar_agent import calendar_agent
-from app.agents.task_agent import task_agent
+from app.mcp.tool_registry import TOOLS
 from app.agents.memory_agent import memory_agent
-from app.services.intent_service import detect_intent
+import re
+
+# 🔥 STATE
+pending_task = None
+pending_meeting = None
+
+
+# =========================
+# 🧠 EXTRACT TIME + DATE
+# =========================
+def extract_time_and_date(text):
+    text = text.lower().strip()
+
+    # TIME → handles "9am", "9 am"
+    time_match = re.search(r'(\d{1,2})\s*(am|pm)', text)
+    time = None
+    if time_match:
+        time = f"{time_match.group(1)}{time_match.group(2)}"
+
+    # DATE
+    date = None
+    if "today" in text:
+        date = "today"
+    elif "tomorrow" in text:
+        date = "tomorrow"
+
+    return time, date
+
 
 def handle_request(query: str):
     try:
-        print("🤖 Processing query...")
+        print("🤖 Processing (clean AI)...")
 
-        intent = detect_intent(query)
-        print("🧠 Detected intent:", intent)
+        global pending_task, pending_meeting
+
+        q = query.lower()
 
         agents_used = []
         actions = []
+        trace = []
 
-        # 🔥 BASIC PARSING (simple but effective)
-        query_lower = query.lower()
+        commands = [
+            cmd.strip() for cmd in q.replace(" and ", ",").split(",")
+        ]
 
-        # naive extraction (good enough for hackathon)
-        title = query
-        time = "Not specified"
+        for cmd in commands:
 
-        if "tomorrow" in query_lower:
-            time = "Tomorrow"
-        elif "today" in query_lower:
-            time = "Today"
+            step = {
+                "command": cmd,
+                "agent": None,
+                "reason": None,
+                "action": None
+            }
 
-        # 🔥 Intent-based routing
+            # =========================
+            # 🔁 FOLLOW-UP TASK
+            # =========================
+            if pending_task and any(x in cmd for x in ["am", "pm"]):
+                agents_used.append("TaskAgent")
 
-        if intent == "calendar":
-            agents_used.append("CalendarAgent")
-            actions.append(
-                calendar_agent.tools[0]({
-                    "title": title,
-                    "time": time
+                step["agent"] = "TaskAgent"
+                step["reason"] = "Follow-up time for task"
+
+                time, new_date = extract_time_and_date(cmd)
+
+                result = TOOLS["create_task"]({
+                    "task": pending_task["task"],
+                    "date": new_date if new_date else pending_task.get("date", "unknown"),
+                    "time": time if time else "unknown"
                 })
-            )
 
-        elif intent == "task":
-            agents_used.append("TaskAgent")
-            actions.append(
-                task_agent.tools[0]({
-                    "task": query
+                pending_task = None
+
+                step["action"] = result
+                actions.append(result)
+                trace.append(step)
+                continue
+
+            # =========================
+            # 🔁 FOLLOW-UP MEETING
+            # =========================
+            if pending_meeting and any(x in cmd for x in ["am", "pm"]):
+                agents_used.append("CalendarAgent")
+
+                step["agent"] = "CalendarAgent"
+                step["reason"] = "Follow-up time for meeting"
+
+                time, new_date = extract_time_and_date(cmd)
+
+                result = TOOLS["create_meeting"]({
+                    "title": pending_meeting["title"],
+                    "date": new_date if new_date else pending_meeting.get("date", "unknown"),
+                    "time": time if time else "unknown"
                 })
-            )
 
-        elif intent == "knowledge":
-            agents_used.append("KnowledgeAgent")
-            actions.append(f"🧠 Answering: {query}")
+                pending_meeting = None
 
-        # always memory
+                step["action"] = result
+                actions.append(result)
+                trace.append(step)
+                continue
+
+            # =========================
+            # 📅 MEETING
+            # =========================
+            if "meeting" in cmd or "schedule" in cmd:
+
+                agents_used.append("CalendarAgent")
+                step["agent"] = "CalendarAgent"
+
+                # 🔍 RETRIEVE
+                if any(w in cmd for w in ["show", "display", "list", "get", "what", "see"]):
+                    step["reason"] = "Meeting retrieval"
+                    result = TOOLS["get_meetings"](None)
+
+                # ➕ CREATE
+                else:
+                    step["reason"] = "Meeting creation"
+
+                    # 🔥 EXTRACT FIRST
+                    time, extracted_date = extract_time_and_date(cmd)
+
+                    # 🔥 CLEAN TEXT
+                    clean_title = re.sub(r'\d{1,2}\s*(am|pm)', '', cmd)
+                    clean_title = re.sub(r'\b(today|tomorrow)\b', '', clean_title)
+
+                    for word in ["schedule", "meeting", "with"]:
+                        clean_title = clean_title.replace(word, "")
+
+                    clean_title = clean_title.strip()
+
+                    if not time:
+                        pending_meeting = {
+                            "title": clean_title or "meeting",
+                            "date": extracted_date or "unknown"
+                        }
+                        result = "⏰ What time is the meeting?"
+                    else:
+                        result = TOOLS["create_meeting"]({
+                            "title": clean_title or "meeting",
+                            "date": extracted_date or "unknown",
+                            "time": time
+                        })
+
+                step["action"] = result
+                actions.append(result)
+
+            # =========================
+            # ✅ TASK
+            # =========================
+            elif "task" in cmd:
+
+                agents_used.append("TaskAgent")
+                step["agent"] = "TaskAgent"
+
+                # 🔍 RETRIEVE
+                if any(w in cmd for w in ["show", "display", "list", "get", "what", "see"]):
+                    step["reason"] = "Task retrieval"
+                    result = TOOLS["get_tasks"](None)
+
+                # ➕ CREATE
+                else:
+                    step["reason"] = "Task creation"
+
+                    # 🔥 EXTRACT FIRST
+                    time, extracted_date = extract_time_and_date(cmd)
+
+                    # 🔥 CLEAN TEXT
+                    clean_task = re.sub(r'\d{1,2}\s*(am|pm)', '', cmd)
+                    clean_task = re.sub(r'\b(today|tomorrow)\b', '', clean_task)
+
+                    for word in ["add", "task", "for"]:
+                        clean_task = clean_task.replace(word, "")
+
+                    clean_task = clean_task.strip()
+
+                    if not time:
+                        pending_task = {
+                            "task": clean_task or "task",
+                            "date": extracted_date or "unknown"
+                        }
+                        result = "⏰ What time should I schedule this task?"
+                    else:
+                        result = TOOLS["create_task"]({
+                            "task": clean_task or "task",
+                            "date": extracted_date or "unknown",
+                            "time": time
+                        })
+
+                step["action"] = result
+                actions.append(result)
+
+            # =========================
+            # 👋 GREETING
+            # =========================
+            elif any(w in cmd for w in ["hi", "hello", "hey"]):
+                agents_used.append("Assistant")
+                step["agent"] = "Assistant"
+                step["reason"] = "Greeting"
+
+                result = "👋 Hey! I can manage tasks and meetings. Type 'help' to see options."
+
+                step["action"] = result
+                actions.append(result)
+
+            # =========================
+            # 🧠 HELP
+            # =========================
+            elif any(w in cmd for w in ["help", "capabilities"]):
+                agents_used.append("Assistant")
+                step["agent"] = "Assistant"
+                step["reason"] = "Help"
+
+                result = (
+                    "🤖 I can:\n"
+                    "• Add tasks → add task gym today 7am\n"
+                    "• Show tasks → show tasks\n"
+                    "• Schedule meetings → schedule meeting tomorrow 9am\n"
+                    "• Show meetings → show meetings\n"
+                )
+
+                step["action"] = result
+                actions.append(result)
+
+            # =========================
+            # ❌ UNKNOWN
+            # =========================
+            else:
+                agents_used.append("System")
+                step["agent"] = "System"
+                step["reason"] = "Unknown"
+
+                result = "⚠️ I didn’t understand. Try 'help'."
+
+                step["action"] = result
+                actions.append(result)
+
+            trace.append(step)
+
+        # =========================
+        # 🧠 MEMORY
+        # =========================
         agents_used.append("MemoryAgent")
         actions.append(memory_agent.tools[0](query))
 
-        decision = ", ".join(agents_used)
-
-        print("✅ Agents used:", agents_used)
+        agents_used = list(set(agents_used))
 
         return {
-            "mode": "multi-agent",
-            "decision": f"{decision} selected",
+            "mode": "clean-ai",
+            "decision": ", ".join(agents_used),
             "agents_used": agents_used,
-            "actions": actions
+            "actions": actions,
+            "trace": trace
         }
 
     except Exception as e:
-        print("⚠️ System failed:", e)
+        print("⚠️ Error:", e)
 
         return {
             "mode": "error",
             "decision": "fallback",
-            "agents_used": [],
             "actions": ["Something went wrong"]
         }

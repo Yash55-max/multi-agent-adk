@@ -1,139 +1,160 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Multi-Agent Assistant</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      margin: 0;
-      padding: 20px;
-    }
+    <title>AI Terminal</title>
 
-    h2 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
+    <style>
+        body {
+            background: black;
+            color: #00ff88;
+            font-family: "Courier New", monospace;
+            margin: 0;
+        }
 
-    .container {
-      max-width: 900px;
-      margin: auto;
-    }
+        .terminal-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
 
-    .input-box {
-      display: flex;
-      gap: 10px;
-    }
+        .terminal-header {
+            background: #020202;
+            border-bottom: 1px solid #00ff88;
+            padding: 10px;
+            font-weight: bold;
+            text-align: center;
+        }
 
-    input {
-      flex: 1;
-      padding: 12px;
-      border-radius: 8px;
-      border: none;
-      outline: none;
-    }
+        .terminal {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+        }
 
-    button {
-      padding: 12px 20px;
-      border-radius: 8px;
-      border: none;
-      background: #38bdf8;
-      color: black;
-      cursor: pointer;
-      font-weight: bold;
-    }
+        .line {
+            margin: 6px 0;
+            white-space: pre-wrap;
+        }
 
-    .chat {
-      margin-top: 20px;
-      background: #1e293b;
-      padding: 20px;
-      border-radius: 10px;
-      min-height: 200px;
-    }
+        .user { color: #00ff88; }
+        .bot { color: #00ffaa; }
 
-    .msg {
-      margin-bottom: 15px;
-    }
+        .trace {
+            color: #008f5a;
+            font-size: 13px;
+            margin-left: 10px;
+        }
 
-    .user {
-      color: #facc15;
-    }
+        .input-line {
+            display: flex;
+            align-items: center;
+            border-top: 1px solid #00ff88;
+            padding: 10px;
+        }
 
-    .system {
-      color: #38bdf8;
-    }
+        .prompt { margin-right: 8px; }
 
-    .agents {
-      margin-top: 20px;
-      background: #020617;
-      padding: 15px;
-      border-radius: 10px;
-    }
+        input {
+            background: black;
+            border: none;
+            color: #00ff88;
+            outline: none;
+            flex: 1;
+            font-family: inherit;
+            font-size: 16px;
+        }
 
-    .agent-tag {
-      display: inline-block;
-      padding: 5px 10px;
-      margin: 5px;
-      background: #334155;
-      border-radius: 6px;
-    }
-  </style>
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            background: #00ff88;
+            margin-left: 2px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
 </head>
 
 <body>
 
-<div class="container">
+<div class="terminal-wrapper">
 
-<h2>🤖 Multi-Agent AI Assistant</h2>
+    <div class="terminal-header">
+        ⚡ Multi-Agent AI System Terminal
+    </div>
 
-<div class="input-box">
-  <input id="query" placeholder="Ask something..." />
-  <button onclick="send()">Send</button>
-</div>
+    <div id="terminal" class="terminal"></div>
 
-<div class="chat" id="chat"></div>
-
-<div class="agents" id="agents">
-  <b>⚙️ Agent Activity:</b><br/>
-</div>
+    <div class="input-line">
+        <span class="prompt">➜</span>
+        <input id="query" autofocus />
+        <span class="cursor"></span>
+    </div>
 
 </div>
 
 <script>
-async function send() {
-  const input = document.getElementById("query");
-  const q = input.value;
+function addLine(text, type) {
+    const terminal = document.getElementById("terminal");
 
-  const res = await fetch("/ask", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({query: q})
-  });
+    const div = document.createElement("div");
+    div.className = "line " + type;
+    div.textContent = text;
 
-  const data = await res.json();
-
-  const chat = document.getElementById("chat");
-  const agents = document.getElementById("agents");
-
-  // Clear agent panel
-  agents.innerHTML = "<b>⚙️ Agent Activity:</b><br/>";
-
-  chat.innerHTML += `<div class="msg user"><b>You:</b> ${q}</div>`;
-
-  // Handle structured response
-  const response = data.response;
-
-  if (response.actions) {
-    response.actions.forEach(a => {
-      agents.innerHTML += `<span class="agent-tag">${a}</span>`;
-    });
-  }
-
-  chat.innerHTML += `<div class="msg system"><b>System:</b> ${response.mode}</div>`;
-
-  input.value = "";
+    terminal.appendChild(div);
 }
+
+async function send() {
+    const input = document.getElementById("query");
+    const terminal = document.getElementById("terminal");
+
+    const text = input.value.trim();
+    if (!text) return;
+
+    addLine("➜ " + text, "user");
+    input.value = "";
+
+    const res = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: text })
+    });
+
+    const data = await res.json();
+    const resData = data.response;
+
+    addLine("Agents → " + resData.decision, "bot");
+
+    resData.actions.forEach(a => {
+        addLine(a, "bot");
+    });
+
+    if (resData.trace) {
+        resData.trace.forEach(step => {
+            addLine(`↳ ${step.agent}: ${step.reason}`, "trace");
+        });
+    }
+
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+// ENTER KEY
+document.getElementById("query").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") send();
+});
+
+// 🔥 STARTUP GREETING
+window.onload = () => {
+    addLine("⚡ Multi-Agent System Initialized...", "bot");
+    addLine("🤖 Welcome. I can manage tasks, meetings, and memory.", "bot");
+    addLine("💡 Try:", "bot");
+    addLine("   • add task gym today", "bot");
+    addLine("   • schedule meeting tomorrow", "bot");
+    addLine("   • show tasks today", "bot");
+};
 </script>
 
 </body>
